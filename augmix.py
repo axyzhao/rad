@@ -14,7 +14,6 @@ import torch.nn.functional as F
 from torchvision import datasets
 from torchvision import transforms
 
-import augmentations
 import numpy as np
 from PIL import Image
 
@@ -32,7 +31,7 @@ def normalize(image):
 
 
 def apply_op(image, op, severity):
-  image = np.clip(image * 255., 0, 255).astype(np.uint8)
+  image = np.clip(image, 0, 255).astype(np.uint8)
   pil_img = Image.fromarray(image)  # Convert to PIL.Image
   pil_img = op(pil_img, severity)
   return np.asarray(pil_img) / 255.
@@ -54,7 +53,8 @@ def augment_and_mix(image, severity=3, width=3, depth=-1, alpha=1.):
       np.random.dirichlet([alpha] * width))
   m = np.float32(np.random.beta(alpha, alpha))
 
-  mix = np.zeros_like(image)
+  mix = np.zeros_like(image.permute(1, 2, 0).numpy().astype(float))
+  image = image.permute(1, 2, 0).numpy()
   for i in range(width):
     image_aug = image.copy()
     d = depth if depth > 0 else np.random.randint(1, 4)
@@ -62,10 +62,10 @@ def augment_and_mix(image, severity=3, width=3, depth=-1, alpha=1.):
       op = np.random.choice(augmentations)
       image_aug = apply_op(image_aug, op, severity)
     # Preprocessing commutes since all coefficients are convex
-    mix += ws[i] * normalize(image_aug)
+    mix = np.add(mix, ws[i] * normalize(image_aug), casting='no')
 
   mixed = (1 - m) * normalize(image) + m * mix
-  return mixed
+  return torch.tensor(mixed).permute(2, 0, 1)
 
 def int_parameter(level, maxval):
   """Helper function to scale `val` between 0 and maxval .

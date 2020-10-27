@@ -263,6 +263,7 @@ class RadSacAgent(object):
         detach_encoder=False,
         latent_dim=128,
         data_augs = '',
+        jsd_lambda=1
     ):
         self.device = device
         self.discount = discount
@@ -277,6 +278,7 @@ class RadSacAgent(object):
         self.detach_encoder = detach_encoder
         self.encoder_type = encoder_type
         self.data_augs = data_augs
+        self.jsd_lambda = jsd_lambda
 
         self.augs_funcs = {}
 
@@ -384,7 +386,7 @@ class RadSacAgent(object):
             mu, pi, _, _ = self.actor(obs, compute_log_pi=False)
             return pi.cpu().data.numpy().flatten()
 
-    def update_critic(self, obs, action, reward, next_obs, not_done, L, step):
+    def update_critic(self, obs, clean_obs, action, reward, next_obs, clean_next_obs, not_done, L, step):
         with torch.no_grad():
             _, policy_action, log_pi, _ = self.actor(next_obs)
             target_Q1, target_Q2 = self.critic_target(next_obs, policy_action)
@@ -395,8 +397,18 @@ class RadSacAgent(object):
         # get current Q estimates
         current_Q1, current_Q2 = self.critic(
             obs, action, detach_encoder=self.detach_encoder)
+
+        #clean_Q1, clean_Q2 = self.critic(clean_obs, action, 
+        #    detach_encoder=self.detach_encoder)
+
+        # Clamp mixture distribution to avoid exploding KL divergence
+        #p_mixture1 = torch.clamp((current_Q1 + clean_Q1) / 2., 1e-7, 1e3).log()
+        #jsd_loss = (F.kl_div(current_Q1, clean_Q1, reduction='batchmean') +
+        #              F.kl_div(current_Q2, clean_Q2, reduction='batchmean')
+        #            ) / 2.
+
         critic_loss = F.mse_loss(current_Q1,
-                                 target_Q) + F.mse_loss(current_Q2, target_Q)
+                                 target_Q) + F.mse_loss(current_Q2, target_Q) #+ (self.jsd_lambda * jsd_loss)
         if step % self.log_interval == 0:
             L.log('train_critic/loss', critic_loss, step)
 
@@ -408,7 +420,7 @@ class RadSacAgent(object):
 
         self.critic.log(L, step)
 
-    def update_actor_and_alpha(self, obs, L, step):
+    def update_actor_and_alpha(self, obs, clean_obs, L, step):
         # detach encoder, so we don't update it with the actor loss
         _, pi, log_pi, log_std = self.actor(obs, detach_encoder=True)
         actor_Q1, actor_Q2 = self.critic(obs, pi, detach_encoder=True)
@@ -468,17 +480,17 @@ class RadSacAgent(object):
 
     def update(self, replay_buffer, L, step):
         if self.encoder_type == 'pixel':
-            obs, action, reward, next_obs, not_done = replay_buffer.sample_rad(self.augs_funcs)
+            obs, clean_obs, action, reward, next_obs, clean_next_obs, not_done = replay_buffer.sample_rad(self.augs_funcs)
         else:
             obs, action, reward, next_obs, not_done = replay_buffer.sample_proprio()
     
         if step % self.log_interval == 0:
             L.log('train/batch_reward', reward.mean(), step)
 
-        self.update_critic(obs, action, reward, next_obs, not_done, L, step)
+        self.update_critic(obs, clean_obs, action, reward, next_obs, clean_next_obs, not_done, L, step)
 
         if step % self.actor_update_freq == 0:
-            self.update_actor_and_alpha(obs, L, step)
+            self.update_actor_and_alpha(obs, clean_obs, L, step)
 
         if step % self.critic_target_update_freq == 0:
             utils.soft_update_params(
