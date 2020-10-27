@@ -167,6 +167,32 @@ class ReplayBuffer(Dataset):
         clean_obses = obses.copy()
         next_obses = self.next_obses[idxs]
         clean_next_obses = next_obses.copy()
+      
+        n, c, h, w = obses.shape
+        
+        start = time.time()
+
+        obses = [augmix.augment_and_mix(img)
+                              for img in torch.tensor(obses).view(-1, 3, h, w)]
+        print(obses[0].shape)
+        obses = [torch.cat(obses[i:i+(c//3)], 0) for i in range(0, len(obses), c//3)]
+        next_obses = [augmix.augment_and_mix(img) 
+                              for img in torch.tensor(next_obses).view(-1, 3, h, w)]
+        next_obses = [torch.cat(next_obses[i:i+(c//3)], 0) for i in range(0, len(next_obses), c//3)]
+        obses = torch.stack(obses).float().to(self.device)
+        clean_obses = torch.as_tensor(clean_obses, device=self.device).float()
+        next_obses = torch.stack(next_obses).float().to(self.device)
+        clean_next_obses = torch.as_tensor(clean_next_obses, device=self.device).float()
+
+        obses = obses / 255.
+        clean_obses = clean_obses / 255.
+        clean_next_obses = clean_next_obses / 255.
+        next_obses = next_obses / 255.
+
+        actions = torch.as_tensor(self.actions[idxs], device=self.device)
+        rewards = torch.as_tensor(self.rewards[idxs], device=self.device)
+        not_dones = torch.as_tensor(self.not_dones[idxs], device=self.device)
+        
         """
         if aug_funcs:
             for aug,func in aug_funcs.items():
@@ -178,31 +204,16 @@ class ReplayBuffer(Dataset):
                     og_obses = center_crop_images(obses, self.pre_image_size)
                     og_next_obses = center_crop_images(next_obses, self.pre_image_size)
                     obses, rndm_idxs = func(og_obses, self.image_size, return_random_idxs=True)
-                    next_obses = func(og_next_obses, self.image_size, **rndm_idxs)                     
-        """
-        _, _, h, w = obses.shape
+                    next_obses = func(og_next_obses, self.image_size, **rndm_idxs)
 
-        """
-        start = time.time()
-        obses = [augmix.augment_and_mix(img) 
-                              for img in torch.tensor(obses).view(-1, 3, h, w)]
-        next_obses = [augmix.augment_and_mix(img) 
-                              for img in torch.tensor(next_obses).view(-1, 3, h, w)]
-        print("augmix time", time.time() - start)
-        obses = torch.stack(obses).float().to(self.device)
-        clean_obses = torch.as_tensor(clean_obses, device=self.device).float()
-        next_obses = torch.stack(next_obses).float().to(self.device)
-        clean_next_obses = torch.as_tensor(clean_next_obses, device=self.device).float()
-        """
         obses = torch.as_tensor(obses, device=self.device).float()
         next_obses = torch.as_tensor(next_obses, device=self.device).float()
+        obses = obses / 255.
+        next_obses = next_obses / 255.
+
         actions = torch.as_tensor(self.actions[idxs], device=self.device)
         rewards = torch.as_tensor(self.rewards[idxs], device=self.device)
         not_dones = torch.as_tensor(self.not_dones[idxs], device=self.device)
-
-        """
-        obses = obses / 255.
-        next_obses = next_obses / 255.
 
         # augmentations go here
         if aug_funcs:
@@ -212,7 +223,7 @@ class ReplayBuffer(Dataset):
                     continue
                 obses = func(obses)
                 next_obses = func(next_obses)
-        """
+        """      
         return obses, clean_obses, actions, rewards, next_obses, clean_next_obses, not_dones
 
     def save(self, save_dir):
