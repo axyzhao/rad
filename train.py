@@ -64,6 +64,8 @@ def parse_args():
     parser.add_argument('--init_temperature', default=0.1, type=float)
     parser.add_argument('--alpha_lr', default=1e-4, type=float)
     parser.add_argument('--alpha_beta', default=0.5, type=float)
+    parser.add_argument('--augmix', action='store_true', help='whether to use augmix')
+
     # misc
     parser.add_argument('--seed', default=1, type=int)
     parser.add_argument('--work_dir', default='.', type=str)
@@ -243,6 +245,7 @@ def main():
         device=device,
         image_size=args.image_size,
         pre_image_size=pre_image_size,
+        augmix=args.augmix
     )
 
     agent = make_agent(
