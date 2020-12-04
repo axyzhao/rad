@@ -168,6 +168,9 @@ class ReplayBuffer(Dataset):
         clean_obses = obses.copy()
         next_obses = self.next_obses[idxs]
         clean_next_obses = next_obses.copy()
+
+        clean_obses = torch.as_tensor(clean_obses, device=self.device).float()
+        clean_next_obses = torch.as_tensor(clean_next_obses, device=self.device).float()
       
         n, c, h, w = obses.shape
         
@@ -179,21 +182,29 @@ class ReplayBuffer(Dataset):
           clean_next_obses = clean_next_obses / 255.
           next_obses = next_obses / 255.
 
-          obses = [augmix.augment_and_mix(img)
-                                for img in torch.tensor(obses).view(-1, 3, h, w)]
-          obses = [torch.cat(obses[i:i+(c//3)], 0) for i in range(0, len(obses), c//3)]
-          next_obses = [augmix.augment_and_mix(img) 
-                                for img in torch.tensor(next_obses).view(-1, 3, h, w)]
-          next_obses = [torch.cat(next_obses[i:i+(c//3)], 0) for i in range(0, len(next_obses), c//3)]
+          start_time = time.time()
+
+          obses = [augmix.augment_and_mix(obses[i], seed=i)
+                                for i in range(len(obses))]
+          next_obses = [augmix.augment_and_mix(next_obses[i], seed=i)
+                                for i in range(len(next_obses))]
+          print("Time to augment", time.time() - start_time)
+
+          start_time = time.time()
+
+          obses = [torch.cat(images, 0) for images in obses]
+          
+
+          next_obses = [torch.cat(images, 0) for images in next_obses]
+
           obses = torch.stack(obses).float().to(self.device)
-          clean_obses = torch.as_tensor(clean_obses, device=self.device).float()
           next_obses = torch.stack(next_obses).float().to(self.device)
-          clean_next_obses = torch.as_tensor(clean_next_obses, device=self.device).float()
 
           actions = torch.as_tensor(self.actions[idxs], device=self.device)
           rewards = torch.as_tensor(self.rewards[idxs], device=self.device)
           not_dones = torch.as_tensor(self.not_dones[idxs], device=self.device)
-        
+          print("Time to stack", time.time() - start_time)
+
         else:
           if aug_funcs:
               for aug,func in aug_funcs.items():

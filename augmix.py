@@ -37,7 +37,7 @@ def apply_op(image, op, severity):
   return np.asarray(pil_img) / 255.
 
 
-def augment_and_mix(image, severity=3, width=3, depth=-1, alpha=1.):
+def augment_and_mix(images, severity=3, width=1, depth=1, alpha=1., seed=0):
   """Perform AugMix augmentations and compute mixture.
   Args:
     image: Raw input image as float32 np.ndarray of shape (h, w, c)
@@ -49,23 +49,31 @@ def augment_and_mix(image, severity=3, width=3, depth=-1, alpha=1.):
   Returns:
     mixed: Augmented and mixed image.
   """
+  np.random.seed(seed)
+  ret = []
+  c, h, w = images.shape
   ws = np.float32(
       np.random.dirichlet([alpha] * width))
   m = np.float32(np.random.beta(alpha, alpha))
+  mix = np.zeros((h, w, 3)).astype(float)
 
-  mix = np.zeros_like(image.permute(1, 2, 0).numpy().astype(float))
-  image = image.permute(1, 2, 0).numpy()
-  for i in range(width):
-    image_aug = image.copy()
-    d = depth if depth > 0 else np.random.randint(1, 4)
-    for _ in range(d):
-      op = np.random.choice(augmentations)
-      image_aug = apply_op(image_aug, op, severity)
-    # Preprocessing commutes since all coefficients are convex
-    mix = np.add(mix, ws[i] * normalize(image_aug), casting='no')
+  for image in torch.tensor(images).view(-1, 3, h, w):
+    start = time.time()
+    image = image.permute(1, 2, 0).numpy()
 
-  mixed = (1 - m) * normalize(image) + m * mix
-  return torch.tensor(mixed).permute(2, 0, 1)
+    for i in range(width):
+      image_aug = image.copy()
+      d = depth if depth > 0 else np.random.randint(1, 4)
+      op = np.random.choice(augmentations, size=d, replace=True)
+      for i in range(d):
+        image_aug = apply_op(image_aug, op[i], severity)
+      # Preprocessing commutes since all coefficients are convex
+      mix = np.add(mix, ws[i] * normalize(image_aug), casting='no')
+
+    mixed = (1 - m) * normalize(image) + m * mix
+    
+    ret.append(torch.tensor(mixed).permute(2, 0, 1))
+  return ret
 
 def int_parameter(level, maxval):
   """Helper function to scale `val` between 0 and maxval .
