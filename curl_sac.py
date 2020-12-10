@@ -263,7 +263,7 @@ class RadSacAgent(object):
         detach_encoder=False,
         latent_dim=128,
         data_augs = '',
-        jsd_lambda=1
+        jsd_lambda=0.5
     ):
         self.device = device
         self.discount = discount
@@ -401,16 +401,10 @@ class RadSacAgent(object):
         clean_Q1, clean_Q2 = self.critic(clean_obs, action, 
             detach_encoder=self.detach_encoder)
 
-        # Clamp mixture distribution to avoid exploding KL divergence
-        p_mixture1 = torch.clamp((current_Q1 + clean_Q1) / 2., 1e-7, 1e3).log()
-        #p_mixture2 = torch.clamp((current_Q2 + clean_Q2) / 2., 1e-7, 1e3).log()
-
-        jsd_loss = (F.kl_div(p_mixture1, clean_Q1, reduction='batchmean') +
-                    F.kl_div(p_mixture1, current_Q1, reduction='batchmean')
-                    ) / 2.
-
-        critic_loss = F.mse_loss(current_Q1,
-                                 target_Q) + F.mse_loss(current_Q2, target_Q) + (self.jsd_lambda * jsd_loss)
+        critic_loss = (F.mse_loss(current_Q1,
+                                 target_Q) + F.mse_loss(current_Q2, target_Q) + self.jsd_lambda *
+                                 (torch.norm(current_Q1 - clean_Q1, dim=1).mean() + 
+                                 torch.norm(current_Q2 - clean_Q2, dim=1).mean()))
 
         if step % self.log_interval == 0:
             L.log('train_critic/loss', critic_loss, step)

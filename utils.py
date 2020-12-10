@@ -216,16 +216,18 @@ class ReplayBuffer(Dataset):
                       og_obses = center_crop_images(obses, self.pre_image_size)
                       og_next_obses = center_crop_images(next_obses, self.pre_image_size)
                       obses, rndm_idxs = func(og_obses, self.image_size, return_random_idxs=True)
-                      next_obses = func(og_next_obses, self.image_size, **rndm_idxs)
+                      next_obses = func(og_next_obses, self.image_size, **rndm_idxs)                     
 
           obses = torch.as_tensor(obses, device=self.device).float()
           next_obses = torch.as_tensor(next_obses, device=self.device).float()
-          obses = obses / 255.
-          next_obses = next_obses / 255.
-
           actions = torch.as_tensor(self.actions[idxs], device=self.device)
           rewards = torch.as_tensor(self.rewards[idxs], device=self.device)
           not_dones = torch.as_tensor(self.not_dones[idxs], device=self.device)
+
+          obses = obses / 255.
+          clean_obses = clean_obses / 255.
+          clean_next_obses = clean_next_obses / 255.
+          next_obses = next_obses / 255.
 
           # augmentations go here
           if aug_funcs:
@@ -235,7 +237,7 @@ class ReplayBuffer(Dataset):
                       continue
                   obses = func(obses)
                   next_obses = func(next_obses)
-           
+
         return obses, clean_obses, actions, rewards, next_obses, clean_next_obses, not_dones
 
     def save(self, save_dir):
