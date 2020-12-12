@@ -177,10 +177,8 @@ class ReplayBuffer(Dataset):
         if self.augmix:
           start = time.time()
 
-          obses = obses / 255.
           clean_obses = clean_obses / 255.
           clean_next_obses = clean_next_obses / 255.
-          next_obses = next_obses / 255.
 
           start_time = time.time()
 
